@@ -1,0 +1,38 @@
+:root {
+  --steel: #1e2a33;
+  --steel-plate: #27343e;
+  --steel-line: #3a4955;
+  --sand: #eae3d2;
+  --sand-dim: #a9a597;
+  --brass: #c9a44c;
+  --coral: #e46f5a;
+
+  color-scheme: dark;
+  background: var(--steel);
+  color: var(--sand);
+  font-family: 'Atkinson Hyperlegible Next', system-ui, sans-serif;
+  font-size: 100%;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  accent-color: var(--sand);
+  caret-color: var(--sand);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body, h1, p, figure { margin: 0; }
+
+::selection { background: var(--sand); color: var(--steel); }
+
+:focus-visible {
+  outline: 2px solid var(--sand);
+  outline-offset: 3px;
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

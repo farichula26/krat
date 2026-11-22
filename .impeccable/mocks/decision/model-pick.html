@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--plate:#1C2126;--plate2:#2B3238;--sand:#E8E1D3;--brass:#C8A24A;--warn:#E2725B}
+*{box-sizing:border-box;margin:0}
+body{width:1440px;height:900px;overflow:hidden;background:var(--plate);font-family:"IBM Plex Sans",sans-serif;color:var(--sand)}
+header{position:absolute;top:32px;left:48px;right:48px;display:flex;align-items:center;gap:16px}
+header b{font-size:26px;font-weight:600}
+header span{font-size:15px;opacity:.6}
+.chip{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:15px;border:1px solid var(--plate2);padding:8px 14px;border-radius:999px}
+.chip i{width:8px;height:8px;border-radius:50%;background:var(--brass)}
+.plate{position:absolute;left:50%;top:96px;width:520px;height:520px;margin-left:-260px;background:var(--plate2);border-radius:10px;
+ background-image:
+ radial-gradient(circle,var(--sand) 1.2px,transparent 1.6px);
+ background-size:9px 9px;
+ -webkit-mask:radial-gradient(circle at 50% 50%,#000 0 8%,transparent 8.5% 18%,#000 18.5% 21%,transparent 21.5% 33%,#000 33.5% 36%,transparent 36.5%),
+  conic-gradient(from 0deg,#000 0 3deg,transparent 3deg 42deg,#000 42deg 48deg,transparent 48deg 87deg,#000 87deg 93deg,transparent 93deg 132deg,#000 132deg 138deg,transparent 138deg 177deg,#000 177deg 183deg,transparent 183deg 222deg,#000 222deg 228deg,transparent 228deg 267deg,#000 267deg 273deg,transparent 273deg 312deg,#000 312deg 318deg,transparent 318deg 357deg,#000 357deg);
+ -webkit-mask-composite:source-over}
+.plate-bg{position:absolute;left:50%;top:96px;width:520px;height:520px;margin-left:-260px;background:var(--plate2);border-radius:10px;box-shadow:inset 0 0 0 1px #3a434b}
+.cam{position:absolute;top:96px;right:48px;width:300px;height:200px;border-radius:8px;overflow:hidden;
+ background:radial-gradient(circle at 48% 40%,#8b6f5e 0 14%,transparent 14.5%),radial-gradient(circle at 62% 74%,#c7362f 0 9%,transparent 9.5%),linear-gradient(#3d4a5c,#1d222c)}
+.cam small{position:absolute;left:10px;bottom:8px;font-size:13px}
+.caps{position:absolute;left:50%;top:650px;width:820px;margin-left:-410px;text-align:center}
+.caps .y{font-size:18px;opacity:.6;margin-bottom:10px}
+.caps .k{font-size:30px;line-height:1.35}
+.bar{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);display:flex;gap:12px}
+.btn{height:48px;padding:0 20px;border-radius:999px;border:1px solid #3a434b;display:flex;align-items:center;font-size:16px}
+.btn.end{background:var(--warn);border-color:var(--warn);color:#1C2126;font-weight:600}
+</style></head><body>
+<header><b>krat</b><span>lfm3-omni</span><span class="chip"><i></i>Hablando</span></header>
+<div class="plate-bg"></div><div class="plate"></div>
+<div class="cam"><small>Tu cámara</small></div>
+<div class="caps"><p class="y">Tú: ¿Qué tengo en la mano?</p><p class="k">Veo que sostienes una taza roja. ¿Es la de tu café de la mañana?</p></div>
+<div class="bar"><span class="btn">Silenciar</span><span class="btn">Cámara</span><span class="btn">Voz: Femenina española ▾</span><span class="btn end">Colgar</span></div>
+</body></html>

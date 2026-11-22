@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0}
+body{width:1440px;height:900px;overflow:hidden;background:#0F0F12;color:#fff;font-family:Inter,sans-serif}
+header{position:absolute;top:28px;left:40px;font-weight:600;font-size:18px}
+.orb{position:absolute;left:50%;top:170px;width:340px;height:340px;margin-left:-170px;border-radius:50%;
+ background:radial-gradient(circle at 35% 30%,#fff 0 6%,#3BA4FF 30%,#7C5CFF 65%,#2a1a6e 100%);box-shadow:0 0 120px 20px rgba(124,92,255,.35)}
+.status{position:absolute;top:540px;width:100%;text-align:center;font-size:16px;color:#A1A1AA}
+.cap{position:absolute;top:590px;left:50%;width:760px;margin-left:-380px;text-align:center;font-size:26px;line-height:1.4}
+.self{position:absolute;right:40px;top:28px;width:220px;height:140px;border-radius:14px;overflow:hidden;
+ background:radial-gradient(circle at 48% 40%,#8b6f5e 0 14%,transparent 14.5%),radial-gradient(circle at 62% 74%,#c7362f 0 9%,transparent 9.5%),linear-gradient(#3d4a5c,#1d222c)}
+.bar{position:absolute;bottom:48px;left:50%;transform:translateX(-50%);display:flex;gap:18px}
+.r{width:64px;height:64px;border-radius:50%;background:#27272A}
+.r.end{background:#EF4444}
+</style></head><body>
+<header>krat</header>
+<div class="self"></div>
+<div class="orb"></div>
+<p class="status">Hablando…</p>
+<p class="cap">Veo que sostienes una taza roja. ¿Es la de tu café de la mañana?</p>
+<div class="bar"><span class="r"></span><span class="r"></span><span class="r"></span><span class="r end"></span></div>
+</body></html>

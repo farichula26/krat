@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0}
+body{width:1440px;height:900px;overflow:hidden;background:#000;color:#fff;font-family:Archivo,sans-serif}
+.top{position:absolute;top:36px;left:56px;right:56px;display:flex;align-items:baseline;gap:18px}
+.top b{font-size:22px;font-weight:600;letter-spacing:.04em}
+.top span{font-size:14px;color:#8A8A8A}
+.top .live{margin-left:auto;color:#FF5A1F;font-size:15px}
+svg{position:absolute;left:300px;top:110px}
+.num{position:absolute;left:56px;top:110px;display:flex;flex-direction:column;gap:31px;font-size:14px;color:#8A8A8A}
+.num .on{color:#FF5A1F}
+.cam{position:absolute;right:56px;top:110px;width:240px;height:160px;border:1px solid #333;
+ background:radial-gradient(circle at 48% 40%,#6b6b6b 0 14%,transparent 14.5%),radial-gradient(circle at 62% 74%,#FF5A1F 0 9%,transparent 9.5%),#111}
+.cap{position:absolute;left:300px;right:356px;bottom:120px;font-size:30px;line-height:1.35}
+.cap small{display:block;font-size:16px;color:#8A8A8A;margin-bottom:8px}
+.bar{position:absolute;left:56px;right:56px;bottom:36px;display:flex;gap:12px}
+.btn{height:44px;padding:0 18px;border:1px solid #444;display:flex;align-items:center;font-size:15px}
+.btn.end{margin-left:auto;border-color:#FF5A1F;color:#FF5A1F}
+</style></head><body>
+<div class="top"><b>krat</b><span>KR—014 · lfm3-omni</span><span class="live">● turno en curso</span></div>
+<div class="num"><span>KR—007</span><span>KR—008</span><span>KR—009</span><span>KR—010</span><span>KR—011</span><span>KR—012</span><span>KR—013</span><span class="on">KR—014</span></div>
+<svg width="760" height="420" viewBox="0 0 760 420" fill="none" stroke="#fff" stroke-width="1.2">
+ <path d="M0 20 H260 C290 20 300 6 320 4 C340 2 350 22 380 20 H760" fill="#000"/>
+ <path d="M0 70 H220 C250 70 270 40 300 44 C330 48 340 72 370 66 C400 60 420 70 760 70" fill="#000"/>
+ <path d="M0 120 H280 C300 120 320 90 340 92 C360 94 370 122 400 118 H760" fill="#000"/>
+ <path d="M0 170 H200 C240 170 260 130 300 128 C340 126 360 172 400 166 C430 162 450 170 760 170" fill="#000"/>
+ <path d="M0 220 H300 C320 220 330 196 350 198 C370 200 380 222 410 220 H760" fill="#000"/>
+ <path d="M0 270 H240 C270 270 290 226 320 230 C350 234 360 276 390 268 C420 260 440 270 760 270" fill="#000"/>
+ <path d="M0 320 H260 C290 320 310 284 340 288 C370 292 380 322 410 318 H760" fill="#000"/>
+ <path d="M0 380 H180 C230 380 250 300 300 296 C350 292 370 360 420 350 C460 342 480 380 760 380" fill="#000" stroke="#FF5A1F" stroke-width="2.6"/>
+</svg>
+<div class="cam"></div>
+<p class="cap"><small>tú: ¿Qué tengo en la mano?</small>Veo que sostienes una taza roja. ¿Es la de tu café de la mañana?</p>
+<div class="bar"><span class="btn">Silenciar</span><span class="btn">Cámara</span><span class="btn">Voz: Femenina española ▾</span><span class="btn end">Colgar</span></div>
+</body></html>

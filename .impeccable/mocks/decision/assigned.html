@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0E1430;--ink2:#1C2550;--paper:#F4F4F0;--you:#FFD60A;--sys:#3FD0E0;--cut:#8A93B8}
+*{box-sizing:border-box;margin:0}
+body{width:1440px;height:900px;overflow:hidden;background:var(--ink);font-family:"Atkinson Hyperlegible",sans-serif;color:var(--paper)}
+.frame{position:absolute;inset:24px 24px 216px 24px;border-radius:6px;overflow:hidden;
+ background:radial-gradient(ellipse 30% 42% at 46% 62%,#5a4a42 0 60%,transparent 61%),
+ radial-gradient(circle at 46% 34%,#8b6f5e 0 9%,transparent 9.2%),
+ radial-gradient(circle at 58% 66%,#c7362f 0 5.5%,transparent 5.7%),
+ linear-gradient(180deg,#3d4a5c,#262d3a 70%,#1d222c)}
+.ident{position:absolute;top:48px;left:48px;display:flex;gap:14px;align-items:baseline;background:var(--ink);padding:10px 16px;border-radius:4px}
+.ident b{font-size:28px;letter-spacing:.02em}
+.ident span{font-size:15px;color:var(--cut)}
+.state{position:absolute;top:48px;right:48px;background:var(--ink);padding:10px 16px;border-radius:4px;font-size:17px;display:flex;gap:10px;align-items:center}
+.state i{width:10px;height:10px;border-radius:50%;background:var(--paper)}
+.inset{position:absolute;right:48px;bottom:240px;width:260px;height:260px;background:var(--ink);border-radius:6px;border:2px solid var(--ink2);display:grid;place-items:center}
+.orb{width:150px;height:150px;border-radius:50%;background:radial-gradient(circle at 40% 38%,#fff 0 18%,#cfd6f2 40%,#5a6aa8 72%,transparent 73%);box-shadow:0 0 0 10px rgba(244,244,240,.06),0 0 0 26px rgba(244,244,240,.04)}
+.inset small{position:absolute;bottom:10px;font-size:14px;color:var(--cut)}
+.band{position:absolute;left:24px;right:24px;bottom:96px;height:104px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+.cap{background:#000;padding:6px 14px;font-size:34px;font-weight:700;line-height:1.2}
+.cap.you{color:var(--you);font-size:24px;font-weight:400}
+.log{position:absolute;left:48px;top:120px;width:380px;display:flex;flex-direction:column;gap:8px;font-size:16px}
+.log p{background:rgba(14,20,48,.82);padding:6px 10px;border-radius:3px;max-width:380px}
+.log .y{color:var(--you)} .log .k s{color:var(--cut)}
+.bar{position:absolute;left:24px;right:24px;bottom:24px;height:56px;display:flex;gap:12px;align-items:center}
+.btn{height:48px;padding:0 20px;border-radius:4px;border:1.5px solid var(--ink2);background:var(--ink2);color:var(--paper);font:700 16px "Atkinson Hyperlegible";display:flex;align-items:center}
+.btn.end{margin-left:auto;background:#C8363C;border-color:#C8363C}
+.sel{height:48px;padding:0 16px;border-radius:4px;border:1.5px solid var(--ink2);display:flex;align-items:center;font-size:16px;color:var(--cut)}
+</style></head><body>
+<div class="frame"></div>
+<div class="ident"><b>krat</b><span>lfm3-omni · voz femenina española</span></div>
+<div class="state"><i></i>Hablando · respondió en 2,4 s</div>
+<div class="log">
+ <p class="y">tú: ¿Me oyes bien?</p>
+ <p class="k">krat: Te oigo perfectamente. <s>Cuando quieras, enséñame lo que</s> — cortado</p>
+ <p class="y">tú: Mira, ¿qué tengo en la mano?</p>
+</div>
+<div class="inset"><div class="orb"></div><small>krat</small></div>
+<div class="band">
+ <p class="cap you">¿Qué tengo en la mano?</p>
+ <p class="cap">Veo que sostienes una taza roja. ¿Es la de tu café de la mañana?</p>
+</div>
+<div class="bar">
+ <span class="btn">Silenciar micro</span><span class="btn">Apagar cámara</span>
+ <span class="sel">Voz: Femenina española ▾</span>
+ <span class="btn end">Colgar</span>
+</div>
+</body></html>

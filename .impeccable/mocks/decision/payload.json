@@ -1,0 +1,123 @@
+{
+  "title": "Elige el mundo visual de krat",
+  "question": "La tirada asignó «Subtítulos en directo». Quédatela, toma una alternativa o vuelve a tirar.",
+  "options": [
+    {
+      "id": "assigned",
+      "kind": "assigned",
+      "label": "Subtítulos en directo",
+      "kicker": "THE ROLL",
+      "lineage": "Subtitulado de emisión en directo y el recuadro del intérprete de signos",
+      "thesis": "La llamada se ve como una emisión subtitulada: tu cámara es la imagen, krat el intérprete en el recuadro.",
+      "palette": ["#0E1430", "#1C2550", "#F4F4F0", "#FFD60A", "#3FD0E0"],
+      "materials": ["banda de subtítulo opaca", "recuadro de intérprete", "colores de hablante del teletexto"],
+      "viewport": "Tu webcam llena el encuadre; el orbe de krat vive en el recuadro inferior derecho; abajo, la banda de subtítulos: blanco para krat, amarillo para ti.",
+      "risk": "Si la banda se compone tímida, parece un reproductor de vídeo y no una conversación.",
+      "raised": [
+        {"from": "challenger-darkroom", "raise": "Los tonos se limitan a cinco pasos con nombre del azul de emisión; no hay grises sueltos."},
+        {"from": "challenger-roster", "raise": "La placa de krat (nombre, voz, modelo) queda fija arriba a la izquierda, como la mosca de un canal."},
+        {"from": "challenger-monochrome", "raise": "Cada estado trae su prueba: «pensando» muestra los segundos y la latencia del turno anterior."},
+        {"from": "challenger-acetate", "raise": "Subtítulos y estados entran en corte seco, como un cambio de subtítulo; solo el orbe se anima."},
+        {"from": "challenger-ticket", "raise": "Nada desaparece: una respuesta interrumpida queda en el registro tachada y marcada «cortado»."}
+      ],
+      "html": ".impeccable/mocks/decision/assigned.html"
+    },
+    {
+      "id": "model-pick",
+      "kind": "pick",
+      "label": "Placa de Chladni",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "Figuras de Chladni: arena que dibuja el sonido sobre una placa que vibra",
+      "thesis": "La voz de krat se hace visible: arena que forma figuras nodales distintas al escuchar, pensar y hablar.",
+      "palette": ["#1C2126", "#2B3238", "#E8E1D3", "#C8A24A", "#E2725B"],
+      "materials": ["placa de metal pavonado", "arena fina", "latón"],
+      "viewport": "Una placa cuadrada al centro con la figura de arena como protagonista; tu cámara arriba a la derecha; los subtítulos debajo de la placa.",
+      "risk": "Un avatar de partículas que reacciona a la voz es lo que muestran muchas demos de asistentes de voz; es familiar.",
+      "html": ".impeccable/mocks/decision/model-pick.html"
+    },
+    {
+      "id": "challenger-pulsar",
+      "kind": "challenger",
+      "catalogId": "brand-identity-canon-saville-catalog-sleeve",
+      "label": "Catálogo de pulsos",
+      "verdict": "competitive",
+      "lineage": "Identidad de catálogo de Factory Records y la gráfica del púlsar",
+      "thesis": "Cada turno es una línea en la gráfica de pulsos de la conversación; el turno vivo se dibuja al doble de grosor.",
+      "palette": ["#000000", "#FFFFFF", "#8A8A8A", "#FF5A1F"],
+      "materials": ["negro mate", "trazo blanco fino", "bloques de color codificados"],
+      "viewport": "La pila de pulsos ocupa el campo; cada turno lleva su número de catálogo; la cámara entra como recuadro pequeño.",
+      "case": "Se funde bien: los turnos se convierten en líneas de audio reales. Pierde en claridad porque las etiquetas codificadas esconden el estado.",
+      "risk": "Se lee como homenaje si la gráfica es decorativa y no se dibuja con el audio real.",
+      "hero": "https://impeccable.style/worlds/cards/brand-identity-canon-saville-catalog-sleeve-hero.webp",
+      "html": ".impeccable/mocks/decision/challenger-pulsar.html"
+    },
+    {
+      "id": "challenger-darkroom", "kind": "challenger", "catalogId": "operate-b-exposure-record-zone-sheets",
+      "label": "Ficha de exposición", "verdict": "declined",
+      "lineage": "Fichas de ampliadora en el cuarto oscuro",
+      "thesis": "Hojas translúcidas con sombreado por zona sobre una rampa tonal de once pasos.",
+      "palette": ["#1A1A1A", "#7A7A7A", "#EDEDED", "#D0308A"], "materials": ["papel de calco", "rampa de zonas"],
+      "viewport": "Hojas superpuestas con la cámara en una zona despejada.", "risk": "Ajeno a una llamada de voz.",
+      "case": "Se funde mal: nadie reconoce una llamada en una ficha de laboratorio fotográfico.",
+      "kept": "Una rampa tonal fija: cada tono en pantalla es uno de pocos pasos con nombre.",
+      "hero": "https://impeccable.style/worlds/cards/operate-b-exposure-record-zone-sheets-hero.webp"
+    },
+    {
+      "id": "challenger-roster", "kind": "challenger", "catalogId": "pop-culture-shelf-character-goods-catalog",
+      "label": "Catálogo de personajes", "verdict": "declined",
+      "lineage": "Catálogos de mascotas con placa de nombre",
+      "thesis": "Personajes redondeados con placa, cumpleaños y una nota de carácter.",
+      "palette": ["#FCE4EC", "#E3F2FD", "#FFFFFF", "#FF6F91"], "materials": ["pastel plano", "contorno blanco"],
+      "viewport": "Una ficha de personaje para krat.", "risk": "Infantiliza una herramienta de laboratorio.",
+      "case": "Se funde mal: el equipo prueba un modelo, no colecciona mascotas.",
+      "kept": "krat tiene una placa fija: nombre, voz y modelo siempre en el mismo sitio.",
+      "hero": "https://impeccable.style/worlds/cards/pop-culture-shelf-character-goods-catalog-hero.webp"
+    },
+    {
+      "id": "challenger-monochrome", "kind": "challenger", "catalogId": "digital-design-canon-monochrome-product-marketing",
+      "label": "Producto monocromo", "verdict": "declined",
+      "lineage": "Marketing de software en una escala neutra",
+      "thesis": "Escala neutra, un acento y cada afirmación con su prueba.",
+      "palette": ["#FAFAFA", "#18181B", "#6366F1"], "materials": ["gradiente radial suave", "botones fantasma"],
+      "viewport": "Pantalla gris con orbe y un acento.", "risk": "Es el aspecto por defecto de la categoría.",
+      "case": "Se funde mal: es el estándar de la categoría sin su pulido.",
+      "kept": "Cada estado con su prueba: el estado «pensando» muestra los segundos transcurridos.",
+      "hero": "https://impeccable.style/worlds/cards/digital-design-canon-monochrome-product-marketing-hero.webp"
+    },
+    {
+      "id": "challenger-acetate", "kind": "challenger", "catalogId": "rw-manual-acetate-tab-board",
+      "label": "Manual de acetatos", "verdict": "declined",
+      "lineage": "Manuales de software en caja con separadores de color",
+      "thesis": "Hojas de acetato sobre separadores de color, cambios en dos fotogramas.",
+      "palette": ["#F2A900", "#E8E4DA", "#1F5FBF", "#E03C31"], "materials": ["acetato lechoso", "separador de cartón"],
+      "viewport": "Separadores con pestañas por sección.", "risk": "Pide un documento, no una llamada.",
+      "case": "Se funde mal: una llamada no tiene secciones que paginar.",
+      "kept": "Los cambios de estado son cortes secos de dos fotogramas; solo el orbe se mueve suave.",
+      "hero": "https://impeccable.style/worlds/cards/rw-manual-acetate-tab-board-hero.webp"
+    },
+    {
+      "id": "challenger-ticket", "kind": "challenger", "catalogId": "vernacular-ephemera-jet-age-ticket-wallet",
+      "label": "Billetera de billetes", "verdict": "declined",
+      "lineage": "Billetes de avión de la era jet con copias al carbón",
+      "thesis": "Cupones que se sellan como validados, usados o anulados.",
+      "palette": ["#1B2A52", "#C8102E", "#FFFFFF", "#5B3E8E"], "materials": ["papel carbón", "sello rojo"],
+      "viewport": "Cada turno como un cupón.", "risk": "Convierte la conversación en trámite.",
+      "case": "Se funde mal: hablar no es un viaje por tramos.",
+      "kept": "Nada desaparece: una respuesta interrumpida queda marcada como cortada.",
+      "hero": "https://impeccable.style/worlds/cards/vernacular-ephemera-jet-age-ticket-wallet-hero.webp"
+    }
+  ],
+  "reroll": {"registers": ["safer", "bolder"]},
+  "canon": true,
+  "canonCard": {
+    "kind": "canon",
+    "label": "El estándar de la categoría",
+    "thesis": "La llamada de voz con IA que todos conocen, hecha con oficio.",
+    "palette": ["#0F0F12", "#FFFFFF", "#7C5CFF", "#3BA4FF"],
+    "materials": ["orbe con degradado", "botones redondos", "vista propia en miniatura"],
+    "viewport": "Orbe degradado al centro, tu cámara en miniatura, botones redondos de silenciar y colgar abajo.",
+    "risk": "Indistinguible de cualquier modo de voz de un asistente.",
+    "html": ".impeccable/mocks/decision/canon.html"
+  },
+  "steer": true
+}
