@@ -49,13 +49,18 @@ func (s *server) handleLive(ctx context.Context, c *websocket.Conn, model, voice
 		fail("fatal", "No se pudo preparar la conexión con Gemini.", err)
 		return
 	}
-	sess, err := client.Live.Connect(ctx, model, &genai.LiveConnectConfig{
+	lc := &genai.LiveConnectConfig{
 		ResponseModalities:       []genai.Modality{genai.ModalityAudio},
 		SystemInstruction:        &genai.Content{Parts: []*genai.Part{{Text: instruction}}},
 		SpeechConfig:             &genai.SpeechConfig{VoiceConfig: &genai.VoiceConfig{PrebuiltVoiceConfig: &genai.PrebuiltVoiceConfig{VoiceName: voice}}},
 		InputAudioTranscription:  &genai.AudioTranscriptionConfig{},
 		OutputAudioTranscription: &genai.AudioTranscriptionConfig{},
-	})
+	}
+	if s.db != nil {
+		lc.SystemInstruction.Parts[0].Text += cartaInstruction
+		lc.Tools = []*genai.Tool{{FunctionDeclarations: cartaTools}}
+	}
+	sess, err := client.Live.Connect(ctx, model, lc)
 	if err != nil {
 		fail("fatal", "No se pudo conectar con Gemini. Revisa la clave y vuelve a intentarlo.", err)
 		return
@@ -63,6 +68,14 @@ func (s *server) handleLive(ctx context.Context, c *websocket.Conn, model, voice
 	defer sess.Close()
 	log.Printf("live: conectado a %s (voz %s)", model, voice)
 	send(outMsg{Type: "ready"})
+
+	// genai.Session writes to its websocket without a lock; tool replies and media come from two goroutines.
+	var smu sync.Mutex
+	sessSend := func(f func() error) error {
+		smu.Lock()
+		defer smu.Unlock()
+		return f()
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -77,6 +90,21 @@ func (s *server) handleLive(ctx context.Context, c *websocket.Conn, model, voice
 					fail("error", "Gemini cerró la conexión.", err)
 				}
 				return
+			}
+			// Cancellations are ignored: the tools only read.
+			if m.ToolCall != nil {
+				var res []*genai.FunctionResponse
+				for _, fc := range m.ToolCall.FunctionCalls {
+					r := runCartaTool(ctx, s.db, fc)
+					log.Printf("live: tool %s(%v) → %s", fc.Name, fc.Args, toolSummary(r))
+					res = append(res, &genai.FunctionResponse{ID: fc.ID, Name: fc.Name, Response: r})
+				}
+				if err := sessSend(func() error { return sess.SendToolResponse(genai.LiveToolResponseInput{FunctionResponses: res}) }); err != nil {
+					if ctx.Err() == nil {
+						fail("error", "Se perdió la conexión con Gemini.", err)
+					}
+					return
+				}
 			}
 			sc := m.ServerContent
 			if sc == nil {
@@ -143,7 +171,7 @@ func (s *server) handleLive(ctx context.Context, c *websocket.Conn, model, voice
 		default:
 			continue
 		}
-		if err := sess.SendRealtimeInput(in); err != nil {
+		if err := sessSend(func() error { return sess.SendRealtimeInput(in) }); err != nil {
 			if ctx.Err() == nil {
 				fail("error", "Se perdió la conexión con Gemini.", err)
 			}

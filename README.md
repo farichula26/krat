@@ -38,6 +38,9 @@ Vite imprime una URL `Network: https://<ip-del-portátil>:5173/`; ábrela en el 
 | `OLLAMA_MODEL` | `lfm3-omni:latest` |
 | `PORT` | `8080` |
 | `GEMINI_API_KEY` | vacía: solo aparece el modelo local |
+| `DATABASE_URL` | vacía: Gemini no consulta la carta |
+| `DB_SSH` | vacía: conexión directa a `DATABASE_URL`, sin túnel |
+| `DB_SSH_KEY` | `~/.ssh/tunel_pruebas_sisopia` |
 
 ## Elegir modelo
 
@@ -53,6 +56,33 @@ Antes de llamar, el selector junto a «Empezar llamada» permite elegir el model
 - Con Gemini la voz se fija al empezar la llamada. Se reutiliza el mismo prompt de krat.
 - Una clave inválida o un modelo no disponible muestra un aviso y cuelga sin reintentar. Un corte en plena llamada sí se reintenta.
 - Si preguntas la hora, Gemini responde en hora UTC, no en la tuya.
+
+## Carta del restaurante (solo Gemini)
+
+Con `DATABASE_URL` en `backend/.env`, krat atiende como mozo: consulta la carta en la base de datos `inventario` (solo lectura, datos de prueba) y da los precios reales. La base de datos solo es accesible por SSH, y el backend abre ese túnel él mismo; no hace falta un `ssh -L` aparte:
+
+```
+DATABASE_URL=postgres://lector_pruebas:<contraseña>@127.0.0.1:55432/inventario   # host visto desde el servidor SSH
+DB_SSH=tunel_pruebas@167.86.79.210
+DB_SSH_KEY=~/.ssh/tunel_pruebas_sisopia
+```
+
+- El túnel se abre en la primera consulta. Un keepalive cada 15 s lo cierra si el servidor deja de contestar (suspensión del portátil, cortes de red), y la siguiente consulta abre uno nuevo.
+- La llave del servidor se verifica contra `~/.ssh/known_hosts`: conéctate una vez con `ssh` para registrarla.
+
+Gemini dispone de dos tools (`backend/carta.go`), con SQL fijo y parametrizado:
+
+| Tool | Devuelve |
+|---|---|
+| `categorias(sucursal?)` | Sucursales con carta y sus categorías |
+| `buscar_carta(texto?, categoria?, sucursal?)` | Hasta 20 productos con sucursal, categoría, descripción y precio en soles |
+
+- Las búsquedas ignoran mayúsculas y tildes y van por palabras: cada palabra debe empezar una palabra del producto («ron» no encuentra «Corona»). Primero salen los productos que coinciden con más palabras.
+- La carta no indica el tipo de licor (un ron aparece como Flor de Caña o Cartavio). Si una búsqueda por tipo no da nada, krat revisa la categoría y usa lo que sabe de las marcas.
+- Si el cliente no dice la sucursal, krat la pregunta o la deduce por lo que pide (por ejemplo, el whisky solo está en Bar).
+- krat no registra pedidos.
+- Cada llamada queda en el log: `live: tool buscar_carta(map[sucursal:Bar texto:whisky]) → 3 filas`.
+- Si la base de datos no responde, la tool devuelve un error que le pide al modelo no reintentar. krat avisa al cliente y la llamada sigue.
 
 ## Cómo funciona
 
@@ -77,7 +107,7 @@ Latencia medida (modelo ya caliente, a través del túnel): unos 3,4 s desde que
 
 ## Crecer: tools, MCP, RAG
 
-Todo pasa por `newAgent` en `backend/agent.go`:
+En Gemini Live, las tools se declaran en `LiveConnectConfig.Tools` y se responden en `handleLive` (`backend/live.go`); `carta.go` es el ejemplo. En el modo local todo pasa por `newAgent` en `backend/agent.go`:
 - **Tools:** añade tools de Eino en `ToolsConfig` del `ChatModelAgentConfig`.
 - **MCP:** usa las tools MCP de `eino-ext` y regístralas igual.
 - **RAG:** un retriever de Eino como tool, o en el armado de mensajes de `Reply`.
