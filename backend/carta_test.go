@@ -2,79 +2,115 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/genai"
 )
 
-// Integration test against the test database; needs DATABASE_URL (and DB_SSH for the tunnel).
+func precio(p float64) *float64 { return &p }
+
+var cartaFixture = []producto{
+	{"Bar", "Corona", "Cervezas", "", precio(15)},
+	{"Bar", "Flor de caña 4 años", "Destilados por copa", "", precio(18)},
+	{"Bar", "Flor de caña Centenario 12 años", "Destilados por copa", "", precio(30)},
+	{"Bar", "Cartavio 12 años", "Destilados por copa", "", precio(28)},
+	{"Bar", "Chivas 12", "Whisky", "", precio(35)},
+	{"SISA Coffee & Wine", "Frappé de vainilla", "Cafés Fríos", "", precio(16)},
+	{"SISA Coffee & Wine", "Pizza margarita", "Pizzas", "tomate y albahaca", nil},
+	{"Curich", "Café americano", "Cafés", "", precio(8)},
+}
+
+func TestBuscar(t *testing.T) {
+	names := func(ps []producto) (out []string) {
+		for _, p := range ps {
+			out = append(out, p.Nombre)
+		}
+		return
+	}
+	if got := names(buscar(cartaFixture, "ron", "", "")); len(got) != 0 {
+		t.Errorf("ron coincide con %v", got)
+	}
+	if got := buscar(cartaFixture, "cafe", "", "sisa"); len(got) != 1 || got[0].Nombre != "Frappé de vainilla" {
+		t.Errorf("cafe/sisa: %v", names(got))
+	}
+	if got := buscar(cartaFixture, "flor de caña 12", "", "bar"); got[0].Nombre != "Flor de caña Centenario 12 años" {
+		t.Errorf("flor de caña 12: %v", names(got))
+	}
+	if got := buscar(cartaFixture, "ALBAHACA", "", ""); len(got) != 1 || got[0].Precio != nil {
+		t.Errorf("descripción / precio null: %v", got)
+	}
+	if got := buscar(cartaFixture, "", "destilados", ""); len(got) != 3 {
+		t.Errorf("sin texto, por categoría: %v", names(got))
+	}
+	var many []producto
+	for i := range 30 {
+		many = append(many, producto{Sucursal: "Bar", Nombre: fmt.Sprintf("Pisco %d", i)})
+	}
+	if got := buscar(many, "pisco", "", ""); len(got) != 20 {
+		t.Errorf("límite 20: %d", len(got))
+	}
+
+	cats := categorias(cartaFixture, "BAR")
+	if len(cats) != 3 || cats[1] != (categoriaFila{"Bar", "Destilados por copa", 3}) {
+		t.Errorf("categorias: %v", cats)
+	}
+}
+
+// Integration test: syncs the test database into the local Redis, then queries through the tools.
+// Needs DATABASE_URL (and DB_SSH for the tunnel) and a running Redis.
 func TestCartaTools(t *testing.T) {
 	loadDotEnv(".env")
+	ctx := context.Background()
+	opt, err := redis.ParseURL(env("REDIS_URL", "redis://127.0.0.1:6379/0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rdb := redis.NewClient(opt)
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		t.Skip("sin Redis: ", err)
+	}
+	if r := runCartaTool(ctx, rdb, &genai.FunctionCall{Name: "borrar_todo"}); r["error"] == nil {
+		t.Errorf("tool desconocida sin error: %v", r)
+	}
+
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
 		t.Skip("sin DATABASE_URL")
 	}
-	ctx := context.Background()
-	db, tunnel, err := openCarta(ctx, url, os.Getenv("DB_SSH"), env("DB_SSH_KEY", "~/.ssh/tunel_pruebas_sisopia"))
+	db, _, err := openCarta(ctx, url, os.Getenv("DB_SSH"), env("DB_SSH_KEY", "~/.ssh/tunel_pruebas_sisopia"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-
-	r := runCartaTool(ctx, db, &genai.FunctionCall{Name: "buscar_carta", Args: map[string]any{"texto": "WHISKY"}})
-	rows, ok := r["output"].([]map[string]any)
-	if !ok || len(rows) == 0 {
-		t.Fatalf("buscar_carta whisky: %v", r)
+	if n, err := syncOnce(ctx, db, rdb); err != nil || n == 0 {
+		t.Fatalf("sync: %d productos, %v", n, err)
 	}
-	for _, row := range rows {
-		if p, _ := row["precio"].(float64); p <= 0 {
-			t.Errorf("sin precio: %v", row)
+
+	tool := func(name string, args map[string]any) []producto {
+		r := runCartaTool(ctx, rdb, &genai.FunctionCall{Name: name, Args: args})
+		rows, ok := r["output"].([]producto)
+		if !ok || len(rows) == 0 {
+			t.Fatalf("%s %v: %v", name, args, r)
+		}
+		return rows
+	}
+	for _, p := range tool("buscar_carta", map[string]any{"texto": "WHISKY"}) {
+		if p.Precio == nil || *p.Precio <= 0 {
+			t.Errorf("sin precio: %v", p)
 		}
 	}
-
-	// Accent-insensitive: "cafe" finds "Cafés Fríos", filtered to one branch.
-	r = runCartaTool(ctx, db, &genai.FunctionCall{Name: "buscar_carta", Args: map[string]any{"texto": "cafe", "sucursal": "sisa"}})
-	rows, _ = r["output"].([]map[string]any)
-	if len(rows) == 0 {
-		t.Fatalf("buscar_carta cafe/sisa: %v", r)
-	}
-	for _, row := range rows {
-		if row["sucursal"] != "SISA Coffee & Wine" {
-			t.Errorf("sucursal equivocada: %v", row)
+	for _, p := range tool("buscar_carta", map[string]any{"texto": "cafe", "sucursal": "sisa"}) {
+		if p.Sucursal != "SISA Coffee & Wine" {
+			t.Errorf("sucursal equivocada: %v", p)
 		}
 	}
-
-	// Word search: "ron 12" finds the 12-year rums, and "ron" alone must not match "Corona".
-	r = runCartaTool(ctx, db, &genai.FunctionCall{Name: "buscar_carta", Args: map[string]any{"texto": "flor de caña 12", "sucursal": "bar"}})
-	rows, _ = r["output"].([]map[string]any)
-	if len(rows) == 0 || rows[0]["nombre"] != "Flor de caña Centenario 12 años" {
-		t.Fatalf("flor de caña 12: %v", r)
+	if p := tool("buscar_carta", map[string]any{"texto": "flor de caña 12", "sucursal": "bar"}); p[0].Nombre != "Flor de caña Centenario 12 años" {
+		t.Errorf("flor de caña 12: %v", p[0])
 	}
-	r = runCartaTool(ctx, db, &genai.FunctionCall{Name: "buscar_carta", Args: map[string]any{"texto": "ron"}})
-	rows, _ = r["output"].([]map[string]any)
-	for _, row := range rows {
-		if row["nombre"] == "Corona" {
-			t.Errorf("ron coincide con Corona: %v", rows)
-		}
-	}
-
-	r = runCartaTool(ctx, db, &genai.FunctionCall{Name: "categorias"})
-	if rows, _ := r["output"].([]map[string]any); len(rows) == 0 {
-		t.Fatalf("categorias: %v", r)
-	}
-
-	// A dead SSH session must not break the next query: new connections reopen it.
-	if tunnel != nil {
-		tunnel.close()
-		db.Reset() // drop pooled connections, as a dead session does
-		r = runCartaTool(ctx, db, &genai.FunctionCall{Name: "categorias", Args: map[string]any{"sucursal": "bar"}})
-		if rows, _ := r["output"].([]map[string]any); len(rows) == 0 {
-			t.Fatalf("tras cerrar el túnel: %v", r)
-		}
-	}
-
-	if r := runCartaTool(ctx, db, &genai.FunctionCall{Name: "borrar_todo"}); r["error"] == nil {
-		t.Errorf("tool desconocida sin error: %v", r)
+	if r := runCartaTool(ctx, rdb, &genai.FunctionCall{Name: "categorias"}); len(r["output"].([]categoriaFila)) == 0 {
+		t.Errorf("categorias: %v", r)
 	}
 }

@@ -41,6 +41,7 @@ Vite imprime una URL `Network: https://<ip-del-portátil>:5173/`; ábrela en el 
 | `DATABASE_URL` | vacía: Gemini no consulta la carta |
 | `DB_SSH` | vacía: conexión directa a `DATABASE_URL`, sin túnel |
 | `DB_SSH_KEY` | `~/.ssh/tunel_pruebas_sisopia` |
+| `REDIS_URL` | `redis://127.0.0.1:6379/0`: copia local de la carta |
 
 ## Elegir modelo
 
@@ -67,10 +68,19 @@ DB_SSH=tunel_pruebas@167.86.79.210
 DB_SSH_KEY=~/.ssh/tunel_pruebas_sisopia
 ```
 
-- El túnel se abre en la primera consulta. Un keepalive cada 15 s lo cierra si el servidor deja de contestar (suspensión del portátil, cortes de red), y la siguiente consulta abre uno nuevo.
+krat no consulta el Postgres en cada pregunta. El backend copia la carta entera a un Redis local cada 60 s, y las tools la leen de ahí en menos de 1 ms. Si el Postgres o el túnel se caen, krat sigue con la última copia, incluso después de reiniciar el backend. Para arrancar Redis (una vez; se queda solo en `127.0.0.1`):
+
+```bash
+podman run -d --name krat-redis --network host --userns=keep-id --restart unless-stopped \
+  -v "$PWD/data/redis":/data docker.io/library/redis:8-alpine \
+  redis-server --bind 127.0.0.1 --port 6379 --appendonly yes
+podman exec krat-redis redis-cli GET carta   # ver la copia
+```
+
+- El túnel se abre en el primer sync. Un keepalive cada 15 s lo cierra si el servidor deja de contestar (suspensión del portátil, cortes de red), y el siguiente sync abre uno nuevo.
 - La llave del servidor se verifica contra `~/.ssh/known_hosts`: conéctate una vez con `ssh` para registrarla.
 
-Gemini dispone de dos tools (`backend/carta.go`), con SQL fijo y parametrizado:
+Gemini dispone de dos tools (`backend/carta.go`), que buscan sobre la copia de Redis:
 
 | Tool | Devuelve |
 |---|---|
@@ -81,8 +91,8 @@ Gemini dispone de dos tools (`backend/carta.go`), con SQL fijo y parametrizado:
 - La carta no indica el tipo de licor (un ron aparece como Flor de Caña o Cartavio). Si una búsqueda por tipo no da nada, krat revisa la categoría y usa lo que sabe de las marcas.
 - Si el cliente no dice la sucursal, krat la pregunta o la deduce por lo que pide (por ejemplo, el whisky solo está en Bar).
 - krat no registra pedidos.
-- Cada llamada queda en el log: `live: tool buscar_carta(map[sucursal:Bar texto:whisky]) → 3 filas`.
-- Si la base de datos no responde, la tool devuelve un error que le pide al modelo no reintentar. krat avisa al cliente y la llamada sigue.
+- Cada llamada queda en el log: `live: tool buscar_carta(map[sucursal:Bar texto:whisky]) → 3 filas (1.2ms)`.
+- Si un sync falla, queda en el log (`carta: sync falló, se usa la copia de Redis`). Solo si Redis no responde, o aún no tiene copia, la tool devuelve un error que le pide al modelo no reintentar; krat avisa al cliente y la llamada sigue.
 
 ## Cómo funciona
 

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -56,7 +57,7 @@ func (s *server) handleLive(ctx context.Context, c *websocket.Conn, model, voice
 		InputAudioTranscription:  &genai.AudioTranscriptionConfig{},
 		OutputAudioTranscription: &genai.AudioTranscriptionConfig{},
 	}
-	if s.db != nil {
+	if s.carta != nil {
 		lc.SystemInstruction.Parts[0].Text += cartaInstruction
 		lc.Tools = []*genai.Tool{{FunctionDeclarations: cartaTools}}
 	}
@@ -95,8 +96,9 @@ func (s *server) handleLive(ctx context.Context, c *websocket.Conn, model, voice
 			if m.ToolCall != nil {
 				var res []*genai.FunctionResponse
 				for _, fc := range m.ToolCall.FunctionCalls {
-					r := runCartaTool(ctx, s.db, fc)
-					log.Printf("live: tool %s(%v) → %s", fc.Name, fc.Args, toolSummary(r))
+					start := time.Now()
+					r := runCartaTool(ctx, s.carta, fc)
+					log.Printf("live: tool %s(%v) → %s (%v)", fc.Name, fc.Args, toolSummary(r), time.Since(start))
 					res = append(res, &genai.FunctionResponse{ID: fc.ID, Name: fc.Name, Response: r})
 				}
 				if err := sessSend(func() error { return sess.SendToolResponse(genai.LiveToolResponseInput{FunctionResponses: res}) }); err != nil {

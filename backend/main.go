@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 )
 
 const defaultVoice = "female-spanish"
 
 type config struct {
-	OllamaURL, Model, Port, GeminiKey, DatabaseURL, DBSSH, DBSSHKey string
+	OllamaURL, Model, Port, GeminiKey, DatabaseURL, DBSSH, DBSSHKey, RedisURL string
 }
 
 type server struct {
@@ -24,7 +24,7 @@ type server struct {
 	ready      chan struct{} // closed once the model is loaded on the Ollama side
 	localModel string
 	geminiKey  string        // empty: the Gemini models are not offered
-	db         *pgxpool.Pool // nil: Gemini gets no menu tools
+	carta      *redis.Client // nil: Gemini gets no menu tools
 }
 
 func main() {
@@ -37,6 +37,7 @@ func main() {
 		DatabaseURL: env("DATABASE_URL", ""),
 		DBSSH:       env("DB_SSH", ""),
 		DBSSHKey:    env("DB_SSH_KEY", "~/.ssh/tunel_pruebas_sisopia"),
+		RedisURL:    env("REDIS_URL", "redis://127.0.0.1:6379/0"),
 	}
 	ctx := context.Background()
 	agent, err := newAgent(ctx, cfg)
@@ -45,10 +46,17 @@ func main() {
 	}
 	s := &server{agent: agent, tts: speaker{cfg.OllamaURL, cfg.Model}, ready: make(chan struct{}), localModel: cfg.Model, geminiKey: cfg.GeminiKey}
 	if cfg.DatabaseURL != "" {
-		// Lazy: the pool connects on first query, so a network failure only fails the tool call.
-		if s.db, _, err = openCarta(ctx, cfg.DatabaseURL, cfg.DBSSH, cfg.DBSSHKey); err != nil {
+		// Lazy: the pool connects on first query, so a network failure only fails that sync round.
+		db, _, err := openCarta(ctx, cfg.DatabaseURL, cfg.DBSSH, cfg.DBSSHKey)
+		if err != nil {
 			log.Fatalf("DATABASE_URL: %v", err)
 		}
+		opt, err := redis.ParseURL(cfg.RedisURL)
+		if err != nil {
+			log.Fatalf("REDIS_URL: %v", err)
+		}
+		s.carta = redis.NewClient(opt)
+		go syncCarta(ctx, db, s.carta)
 	}
 	go s.warmup(ctx)
 
@@ -64,7 +72,7 @@ func main() {
 	})
 	mux.HandleFunc("GET /api/models", s.handleModels)
 
-	log.Printf("backend en http://localhost:%s (modelo %s en %s, Gemini: %v, carta: %v)", cfg.Port, cfg.Model, cfg.OllamaURL, cfg.GeminiKey != "", s.db != nil)
+	log.Printf("backend en http://localhost:%s (modelo %s en %s, Gemini: %v, carta: %v)", cfg.Port, cfg.Model, cfg.OllamaURL, cfg.GeminiKey != "", s.carta != nil)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
 }
 

@@ -1,12 +1,20 @@
 package main
 
 import (
+	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
+	"reflect"
+	"regexp"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/genai"
 )
 
@@ -48,63 +56,170 @@ var cartaTools = []*genai.FunctionDeclaration{
 	},
 }
 
-// fold lowercases and strips Spanish accents; the database has no unaccent extension.
-func fold(x string) string { return "translate(lower(" + x + "),'áéíóúüñ','aeiouun')" }
-
-func like(col, param string) string { return fold(col) + " LIKE '%' || " + fold(param) + " || '%'" }
-
-const cartaFrom = `FROM ventas_productoventa p
-JOIN ventas_productoventa_sucursales ps ON ps.productoventa_id = p.id
-JOIN core_sucursal s ON s.id = ps.sucursal_id
-`
-
-var (
-	categoriasSQL = `SELECT s.nombre AS sucursal, p.categoria_venta AS categoria, count(*)::int AS productos ` + cartaFrom +
-		`WHERE p.activo AND s.activa AND s.en_carta_digital AND ` + like("s.nombre", "$1::text") + `
-GROUP BY 1, 2 ORDER BY 1, 2`
-
-	// Each word of texto must start a word of the product ("ron" must not match "Corona");
-	// products matching more words come first, so "flor de caña 12" ranks the right bottle on top.
-	buscarSQL = `SELECT sucursal, nombre, categoria, descripcion, precio FROM (
-  SELECT s.nombre AS sucursal, p.nombre, p.categoria_venta AS categoria, coalesce(p.descripcion, '') AS descripcion,
-    -- the price lists differ by channel, but today every channel has the same price
-    (SELECT min(pi.precio) FROM ventas_precioitem pi WHERE pi.producto_venta_id = p.id)::float8 AS precio,
-    (SELECT count(*) FROM unnest(regexp_split_to_array(` + fold("$1::text") + `, '[^a-z0-9]+')) w
-      WHERE w <> '' AND ' ' || regexp_replace(` + fold("p.nombre || ' ' || p.categoria_venta || ' ' || coalesce(p.descripcion, '')") + `, '[^a-z0-9]+', ' ', 'g') LIKE '% ' || w || '%') AS hits
-  ` + cartaFrom + `WHERE p.activo AND s.activa AND s.en_carta_digital
-    AND ` + like("p.categoria_venta", "$2::text") + `
-    AND ` + like("s.nombre", "$3::text") + `
-) x WHERE hits > 0 OR ` + fold("$1::text") + ` !~ '[a-z0-9]'
-ORDER BY hits DESC, sucursal, categoria, nombre LIMIT 20`
+// The menu lives in Redis as one JSON key, copied from Postgres every cartaSync:
+// the tools read it locally in under a millisecond and keep working when the tunnel is down.
+const (
+	cartaKey  = "carta"
+	cartaSync = 60 * time.Second
 )
 
-// runCartaTool executes one of cartaTools and returns the function response Gemini expects.
-func runCartaTool(ctx context.Context, db *pgxpool.Pool, call *genai.FunctionCall) map[string]any {
-	if db == nil {
+type producto struct {
+	Sucursal    string   `json:"sucursal"`
+	Nombre      string   `json:"nombre"`
+	Categoria   string   `json:"categoria"`
+	Descripcion string   `json:"descripcion"`
+	Precio      *float64 `json:"precio"` // null when the product has no price
+}
+
+type categoriaFila struct {
+	Sucursal  string `json:"sucursal"`
+	Categoria string `json:"categoria"`
+	Productos int    `json:"productos"`
+}
+
+const syncSQL = `SELECT s.nombre AS sucursal, p.nombre, p.categoria_venta AS categoria, coalesce(p.descripcion, '') AS descripcion,
+  -- the price lists differ by channel, but today every channel has the same price
+  (SELECT min(pi.precio) FROM ventas_precioitem pi WHERE pi.producto_venta_id = p.id)::float8 AS precio
+FROM ventas_productoventa p
+JOIN ventas_productoventa_sucursales ps ON ps.productoventa_id = p.id
+JOIN core_sucursal s ON s.id = ps.sucursal_id
+WHERE p.activo AND s.activa AND s.en_carta_digital`
+
+// syncCarta copies the menu into Redis now and every cartaSync, until ctx ends.
+func syncCarta(ctx context.Context, db *pgxpool.Pool, rdb *redis.Client) {
+	last := -1
+	for t := time.NewTicker(cartaSync); ; {
+		if n, err := syncOnce(ctx, db, rdb); err != nil {
+			log.Printf("carta: sync falló, se usa la copia de Redis: %v", err)
+		} else if n != last {
+			log.Printf("carta: %d productos sincronizados", n)
+			last = n
+		}
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return
+		case <-t.C:
+		}
+	}
+}
+
+func syncOnce(ctx context.Context, db *pgxpool.Pool, rdb *redis.Client) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second) // first round opens the SSH tunnel
+	defer cancel()
+	rows, err := db.Query(ctx, syncSQL)
+	if err != nil {
+		return 0, err
+	}
+	carta, err := pgx.CollectRows(rows, pgx.RowToStructByName[producto])
+	if err != nil {
+		return 0, err
+	}
+	if len(carta) == 0 {
+		return 0, fmt.Errorf("la consulta no devolvió productos; no se pisa la copia")
+	}
+	b, err := json.Marshal(carta)
+	if err != nil {
+		return 0, err
+	}
+	return len(carta), rdb.Set(ctx, cartaKey, b, 0).Err()
+}
+
+// foldText lowercases and strips Spanish accents, like the old SQL translate().
+var foldText = func() func(string) string {
+	r := strings.NewReplacer("á", "a", "é", "e", "í", "i", "ó", "o", "ú", "u", "ü", "u", "ñ", "n")
+	return func(s string) string { return r.Replace(strings.ToLower(s)) }
+}()
+
+var nonWord = regexp.MustCompile(`[^a-z0-9]+`)
+
+// buscar ranks products by how many words of texto start a word of the product
+// ("ron" must not match "Corona"; "flor de caña 12" puts the right bottle first).
+func buscar(carta []producto, texto, categoria, sucursal string) []producto {
+	var words []string
+	for _, w := range nonWord.Split(foldText(texto), -1) {
+		if w != "" {
+			words = append(words, " "+w)
+		}
+	}
+	categoria, sucursal = foldText(categoria), foldText(sucursal)
+	type hit struct {
+		p producto
+		n int
+	}
+	var hits []hit
+	for _, p := range carta {
+		if !strings.Contains(foldText(p.Categoria), categoria) || !strings.Contains(foldText(p.Sucursal), sucursal) {
+			continue
+		}
+		hay := " " + nonWord.ReplaceAllString(foldText(p.Nombre+" "+p.Categoria+" "+p.Descripcion), " ")
+		n := 0
+		for _, w := range words {
+			if strings.Contains(hay, w) {
+				n++
+			}
+		}
+		if n > 0 || len(words) == 0 {
+			hits = append(hits, hit{p, n})
+		}
+	}
+	slices.SortStableFunc(hits, func(a, b hit) int {
+		return cmp.Or(b.n-a.n, cmp.Compare(a.p.Sucursal, b.p.Sucursal), cmp.Compare(a.p.Categoria, b.p.Categoria), cmp.Compare(a.p.Nombre, b.p.Nombre))
+	})
+	out := []producto{}
+	for _, h := range hits[:min(len(hits), 20)] {
+		out = append(out, h.p)
+	}
+	return out
+}
+
+// categorias counts products per branch and category.
+func categorias(carta []producto, sucursal string) []categoriaFila {
+	sucursal = foldText(sucursal)
+	out := []categoriaFila{}
+	for _, p := range carta {
+		if !strings.Contains(foldText(p.Sucursal), sucursal) {
+			continue
+		}
+		i := slices.IndexFunc(out, func(c categoriaFila) bool { return c.Sucursal == p.Sucursal && c.Categoria == p.Categoria })
+		if i < 0 {
+			out = append(out, categoriaFila{p.Sucursal, p.Categoria, 0})
+			i = len(out) - 1
+		}
+		out[i].Productos++
+	}
+	slices.SortFunc(out, func(a, b categoriaFila) int {
+		return cmp.Or(cmp.Compare(a.Sucursal, b.Sucursal), cmp.Compare(a.Categoria, b.Categoria))
+	})
+	return out
+}
+
+// runCartaTool executes one of cartaTools against the Redis copy and returns the function response Gemini expects.
+func runCartaTool(ctx context.Context, rdb *redis.Client, call *genai.FunctionCall) map[string]any {
+	if rdb == nil {
 		return map[string]any{"error": "la carta no está configurada"}
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	arg := func(k string) string { s, _ := call.Args[k].(string); return s }
-
-	var rows pgx.Rows
-	var err error
-	switch call.Name {
-	case "categorias":
-		rows, err = db.Query(ctx, categoriasSQL, arg("sucursal"))
-	case "buscar_carta":
-		rows, err = db.Query(ctx, buscarSQL, arg("texto"), arg("categoria"), arg("sucursal"))
-	default:
+	if call.Name != "categorias" && call.Name != "buscar_carta" {
 		return map[string]any{"error": fmt.Sprintf("tool desconocida: %s", call.Name)}
 	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	b, err := rdb.Get(ctx, cartaKey).Bytes()
+	if err == redis.Nil {
+		err = fmt.Errorf("aún no hay copia de la carta en Redis")
+	}
 	if err != nil {
 		return cartaError(err)
 	}
-	out, err := pgx.CollectRows(rows, pgx.RowToMap)
-	if err != nil {
+	var carta []producto
+	if err := json.Unmarshal(b, &carta); err != nil {
 		return cartaError(err)
 	}
-	return map[string]any{"output": out}
+	arg := func(k string) string { s, _ := call.Args[k].(string); return s }
+	if call.Name == "categorias" {
+		return map[string]any{"output": categorias(carta, arg("sucursal"))}
+	}
+	return map[string]any{"output": buscar(carta, arg("texto"), arg("categoria"), arg("sucursal"))}
 }
 
 // cartaError tells the model to stop: without it Gemini retried the same failing call in a loop.
@@ -118,5 +233,5 @@ func toolSummary(r map[string]any) string {
 	if e, ok := r["error"]; ok {
 		return fmt.Sprint(e)
 	}
-	return fmt.Sprintf("%d filas", len(r["output"].([]map[string]any)))
+	return fmt.Sprintf("%d filas", reflect.ValueOf(r["output"]).Len())
 }
