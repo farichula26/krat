@@ -63,7 +63,7 @@ export class Player {
     src.buffer = buf
     src.connect(this.analyser)
     // A little head start on the first chunk absorbs network jitter between chunks.
-    const start = Math.max(this.ctx.currentTime + 0.15, this.at)
+    const start = Math.max(this.ctx.currentTime + 0.1, this.at)
     this.at = start + buf.duration
     src.onended = () => {
       this.sources.delete(src)

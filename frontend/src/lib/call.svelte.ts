@@ -56,7 +56,6 @@ export class Call {
   // Gemini Live: Google runs the turns, so the mic streams continuously instead of one clip per turn.
   private streaming = false
   private frameTimer: ReturnType<typeof setInterval> | undefined
-  private pcm: Int16Array[] = []
   private fatal = false // the server refused the call for good (bad key): do not keep retrying
 
   // Loudness the plate reacts to: krat's voice while it speaks, yours otherwise.
@@ -159,7 +158,6 @@ export class Call {
 
   hangup() {
     clearInterval(this.frameTimer)
-    this.pcm = []
     const ws = this.ws
     this.ws = null
     ws?.close()
@@ -236,6 +234,8 @@ export class Call {
 
   private onSpeechStart() {
     if (!this.ready) return
+    // With Gemini only its server VAD may cut krat ('interrupted'): voices on a TV must not stop playback here.
+    if (this.streaming && (this.status === 'speaking' || this.status === 'thinking')) return
     if (this.status === 'speaking' || this.status === 'thinking') this.interrupt()
     this.set('hearing')
   }
@@ -251,6 +251,7 @@ export class Call {
   private onSpeechEnd(audio: Float32Array) {
     if (!this.ready || !this.micOn) return
     if (this.streaming) { // the audio already went out as it was spoken; Gemini answers on its own
+      if (this.status === 'speaking') return // noise over krat's voice, not a turn
       this.sentAt = performance.now()
       this.set('thinking')
       return
@@ -278,18 +279,12 @@ export class Call {
     return c.toDataURL('image/jpeg', 0.8).split(',')[1]
   }
 
-  // Streams the mic to Gemini as 16 kHz PCM16, about 128 ms per message.
+  // Streams the mic to Gemini as 16 kHz PCM16, one 32 ms VAD frame per message: no buffering delay.
   private feed(frame: Float32Array) {
     if (!this.streaming || !this.ready || !this.micOn) return
     const pcm = new Int16Array(frame.length)
     for (let i = 0; i < frame.length; i++) pcm[i] = Math.max(-1, Math.min(1, frame[i])) * 0x7fff
-    this.pcm.push(pcm)
-    if (this.pcm.length < 4) return
-    const out = new Int16Array(this.pcm.reduce((n, p) => n + p.length, 0))
-    let at = 0
-    for (const p of this.pcm) { out.set(p, at); at += p.length }
-    this.pcm = []
-    this.send({ type: 'audio', data: toBase64(new Uint8Array(out.buffer)) })
+    this.send({ type: 'audio', data: toBase64(new Uint8Array(pcm.buffer)) })
   }
 
   private sendFrame() {
@@ -325,8 +320,8 @@ export class Call {
         break
       case 'audio':
         this.player?.enqueue(m.data!, () => {
-          // Not while you are talking over it, and only once per answer.
-          if (this.status !== 'thinking' && this.status !== 'listening') return
+          // Only once per answer. 'hearing' counts: Gemini may end your turn before the local VAD's 800 ms redemption.
+          if (this.status !== 'thinking' && this.status !== 'listening' && this.status !== 'hearing') return
           this.latency = this.status === 'thinking' ? (performance.now() - this.sentAt) / 1000 : null
           this.vad?.setOptions({ positiveSpeechThreshold: THRESHOLD_WHILE_SPEAKING })
           this.set('speaking')

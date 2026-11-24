@@ -56,6 +56,13 @@ func (s *server) handleLive(ctx context.Context, c *websocket.Conn, model, voice
 		SpeechConfig:             &genai.SpeechConfig{VoiceConfig: &genai.VoiceConfig{PrebuiltVoiceConfig: &genai.PrebuiltVoiceConfig{VoiceName: voice}}},
 		InputAudioTranscription:  &genai.AudioTranscriptionConfig{},
 		OutputAudioTranscription: &genai.AudioTranscriptionConfig{},
+		// Low start sensitivity + 300 ms of steady speech: a TV crowd or a shout doesn't start a turn or cut krat.
+		// 500 ms of silence ends your turn (default ~800): the low end of Google's recommended 500-800 ms.
+		RealtimeInputConfig: &genai.RealtimeInputConfig{AutomaticActivityDetection: &genai.AutomaticActivityDetection{
+			StartOfSpeechSensitivity: genai.StartSensitivityLow,
+			PrefixPaddingMs:          genai.Ptr[int32](300),
+			SilenceDurationMs:        genai.Ptr[int32](500),
+		}},
 	}
 	if s.carta != nil {
 		lc.SystemInstruction.Parts[0].Text += cartaInstruction
