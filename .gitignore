@@ -3,3 +3,4 @@ dist/
 .env
 tunel_pruebas_sisopia
 /data/
+/backend/backend
