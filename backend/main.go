@@ -2,49 +2,40 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"log"
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
-const defaultVoice = "female-spanish"
-
 type config struct {
-	OllamaURL, Model, Port, GeminiKey, DatabaseURL, DBSSH, DBSSHKey, RedisURL string
+	Port, GeminiKey, GeminiModel, DatabaseURL, DBSSH, DBSSHKey, RedisURL string
 }
 
 type server struct {
-	agent      *Agent
-	tts        speaker
-	ready      chan struct{} // closed once the model is loaded on the Ollama side
-	localModel string
-	geminiKey  string        // empty: the Gemini models are not offered
-	carta      *redis.Client // nil: Gemini gets no menu tools
+	geminiKey   string
+	geminiModel string        // Live model id from .env; never sent to the browser
+	carta       *redis.Client // nil: krat gets no menu tools
 }
 
 func main() {
 	loadDotEnv(".env")
 	cfg := config{
-		OllamaURL:   env("OLLAMA_URL", "http://localhost:11434"),
-		Model:       env("OLLAMA_MODEL", "lfm3-omni:latest"),
 		Port:        env("PORT", "8080"),
 		GeminiKey:   env("GEMINI_API_KEY", ""),
+		GeminiModel: env("GEMINI_MODEL", "gemini-3.8-live"),
 		DatabaseURL: env("DATABASE_URL", ""),
 		DBSSH:       env("DB_SSH", ""),
 		DBSSHKey:    env("DB_SSH_KEY", "~/.ssh/tunel_pruebas_sisopia"),
 		RedisURL:    env("REDIS_URL", "redis://127.0.0.1:6379/0"),
 	}
-	ctx := context.Background()
-	agent, err := newAgent(ctx, cfg)
-	if err != nil {
-		log.Fatalf("agent: %v", err)
+	if cfg.GeminiKey == "" {
+		log.Fatal("falta GEMINI_API_KEY en backend/.env")
 	}
-	s := &server{agent: agent, tts: speaker{cfg.OllamaURL, cfg.Model}, ready: make(chan struct{}), localModel: cfg.Model, geminiKey: cfg.GeminiKey}
+	ctx := context.Background()
+	s := &server{geminiKey: cfg.GeminiKey, geminiModel: cfg.GeminiModel}
 	if cfg.DatabaseURL != "" {
 		// Lazy: the pool connects on first query, so a network failure only fails that sync round.
 		db, _, err := openCarta(ctx, cfg.DatabaseURL, cfg.DBSSH, cfg.DBSSHKey)
@@ -58,37 +49,14 @@ func main() {
 		s.carta = redis.NewClient(opt)
 		go syncCarta(ctx, db, s.carta)
 	}
-	go s.warmup(ctx)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /ws", s.handleWS)
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-s.ready:
-			w.Write([]byte("ok"))
-		default:
-			http.Error(w, "warming up", http.StatusServiceUnavailable)
-		}
-	})
-	mux.HandleFunc("GET /api/models", s.handleModels)
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+	mux.HandleFunc("GET /api/voices", s.handleVoices)
 
-	log.Printf("backend en http://localhost:%s (modelo %s en %s, Gemini: %v, carta: %v)", cfg.Port, cfg.Model, cfg.OllamaURL, cfg.GeminiKey != "", s.carta != nil)
+	log.Printf("backend en http://localhost:%s (modelo %s, carta: %v)", cfg.Port, cfg.GeminiModel, s.carta != nil)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
-}
-
-// warmup loads the model on the Ollama side; the first cold call takes ~30 s.
-func (s *server) warmup(ctx context.Context) {
-	defer close(s.ready)
-	start := time.Now()
-	wav, err := s.tts.Speech(ctx, "Hola.", defaultVoice)
-	if err == nil {
-		_, err = s.agent.Transcribe(ctx, base64.StdEncoding.EncodeToString(wav))
-	}
-	if err != nil {
-		log.Printf("warmup falló (¿OLLAMA_URL correcta?): %v", err)
-		return
-	}
-	log.Printf("modelo listo en %s", time.Since(start).Round(time.Millisecond))
 }
 
 func env(k, def string) string {
@@ -99,7 +67,7 @@ func env(k, def string) string {
 }
 
 // loadDotEnv sets KEY=VALUE lines from path. It overrides the shell on purpose: a global
-// OLLAMA_URL pointing at another server is common and would silently win otherwise.
+// variable left over from another project would silently win otherwise.
 func loadDotEnv(path string) {
 	b, err := os.ReadFile(path)
 	if err != nil {

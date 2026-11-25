@@ -194,6 +194,45 @@ func categorias(carta []producto, sucursal string) []categoriaFila {
 	return out
 }
 
+// loadCarta reads the Redis copy of the menu.
+func loadCarta(ctx context.Context, rdb *redis.Client) ([]producto, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	b, err := rdb.Get(ctx, cartaKey).Bytes()
+	if err == redis.Nil {
+		return nil, fmt.Errorf("aún no hay copia de la carta en Redis")
+	}
+	if err != nil {
+		return nil, err
+	}
+	var carta []producto
+	return carta, json.Unmarshal(b, &carta)
+}
+
+// sucursales lists each branch name once, sorted.
+func sucursales(carta []producto) []string {
+	var out []string
+	for _, p := range carta {
+		if !slices.Contains(out, p.Sucursal) {
+			out = append(out, p.Sucursal)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// cartaPrompt adds the branch names to cartaInstruction: without them Gemini took "estoy en el bar"
+// for any bar and kept asking for the name instead of calling categorias.
+func cartaPrompt(ctx context.Context, rdb *redis.Client) string {
+	carta, err := loadCarta(ctx, rdb)
+	if err != nil {
+		log.Printf("carta: prompt sin lista de sucursales: %v", err)
+		return cartaInstruction
+	}
+	return cartaInstruction + "\nLas sucursales son: " + strings.Join(sucursales(carta), ", ") + ". " +
+		`Si el cliente nombra una aunque sea de forma genérica ("estoy en el bar", "en la barra"), esa es su sucursal: no le pidas otro nombre.`
+}
+
 // runCartaTool executes one of cartaTools against the Redis copy and returns the function response Gemini expects.
 func runCartaTool(ctx context.Context, rdb *redis.Client, call *genai.FunctionCall) map[string]any {
 	if rdb == nil {
@@ -202,17 +241,8 @@ func runCartaTool(ctx context.Context, rdb *redis.Client, call *genai.FunctionCa
 	if call.Name != "categorias" && call.Name != "buscar_carta" {
 		return map[string]any{"error": fmt.Sprintf("tool desconocida: %s", call.Name)}
 	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	b, err := rdb.Get(ctx, cartaKey).Bytes()
-	if err == redis.Nil {
-		err = fmt.Errorf("aún no hay copia de la carta en Redis")
-	}
+	carta, err := loadCarta(ctx, rdb)
 	if err != nil {
-		return cartaError(err)
-	}
-	var carta []producto
-	if err := json.Unmarshal(b, &carta); err != nil {
 		return cartaError(err)
 	}
 	arg := func(k string) string { s, _ := call.Args[k].(string); return s }

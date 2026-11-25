@@ -1,6 +1,6 @@
 ---
 name: krat
-description: A hands-free voice and vision call with a local agent, drawn as sand settling on a vibrating steel plate.
+description: A hands-free voice and vision call with an agent, drawn as sand settling on a vibrating steel plate.
 colors:
   steel: "#1e2a33"
   steel-plate: "#27343e"
@@ -136,7 +136,7 @@ A low-chroma, cool blued-steel ground with warm sand ink, plus two strictly rati
 - **Blued Steel** (`steel`): the page ground, `theme-color`, and the background of native `<option>` lists. Steel is also the text colour on every sand or coral fill.
 - **Steel Plate** (`steel-plate`): the plate's surface and the self-view frame's surface, and the hover fill for ghost pills and the voice select. Sitting slightly lighter than the ground is what makes the plate read as an object.
 - **Steel Line** (`steel-line`): every hairline. Used for the 1px borders of pills, the chip and the select, and for the inset edge of the plate and self-view. It sits at 1.58:1 on steel, so it outlines shapes without becoming a graphic element.
-- **Dim Sand** (`sand-dim`): secondary text. Used for the model name beside the wordmark, hints, your transcribed line, an interrupted reply and its "· interrumpida" mark, camera-off captions, the select's chevron, and the idle status dot. Contrast is 5.94:1 on steel and 5.17:1 on plate.
+- **Dim Sand** (`sand-dim`): secondary text. Used for hints, your transcribed line, an interrupted reply and its "· interrumpida" mark, camera-off captions, the select's chevron, and the idle status dot. Contrast is 5.94:1 on steel and 5.17:1 on plate.
 
 ### Named Rules
 **The Brass Is You Rule.** Brass appears only when krat is listening to you or is quoting you: the listening/hearing dot, the "Tú:" prefix, and the hearing-state particles. Never use it for focus, selection, links, hover or decoration. Focus rings, selection, caret and `accent-color` are all sand.
@@ -154,7 +154,7 @@ A low-chroma, cool blued-steel ground with warm sand ink, plus two strictly rati
 ### Hierarchy
 - **Display** (600, clamp(1.5rem, 2.6vw, 2.125rem), tracking -0.015em, balanced wrap): the single heading "Habla con krat", shown only when no call is active.
 - **Headline** (400, clamp(1.25rem, 2.2vw, 1.875rem), line-height 1.35, pretty wrap): krat's reply caption. During a call it is the largest live text on screen.
-- **Title** (600, 1.625rem, tracking -0.01em; 1.375rem at 760px and below): the lowercase "krat" wordmark. The model name beside it is set at 400, 0.9375rem, in dim sand.
+- **Title** (600, 1.625rem, tracking -0.01em; 1.375rem at 760px and below): the lowercase "krat" wordmark, alone: the page never names the model behind it.
 - **Body** (400, 1.0625rem, line-height 1.45): hints and explanatory copy in dim sand. Your transcribed line uses the same face at 1.125rem in dim sand. Controls and inline notices are set at 1rem.
 - **Label** (400, 0.9375rem, tabular figures; 0.8125rem on narrow screens): the status chip. Tabular figures keep the elapsed seconds ("Pensando · 3,2 s") from jittering. Camera captions are set at 0.875rem.
 
@@ -171,7 +171,7 @@ The plate's size is a single custom property, `--plate-size: min(520px, calc(100
 
 Spacing rhythm: 40px page gutters, a 28px gap between plate and captions, 12px between controls, and 10px inside the chip and between caption lines. Header padding is 24px 40px and footer padding is 24px 40px 32px.
 
-At 760px and below, gutters drop to 16px and the plate-to-caption gap to 20px. The plate is sized with `calc(100dvh - 380px)`. The self-view shrinks to 112px and overlaps the plate's top-right corner. Controls no longer wrap. The model and voice selects grow to fill the row. The mute, camera and hang-up pills become icon-only: their labels stay in the DOM as screen-reader text. With no call active, the footer stacks into a column, with the full-width select above a full-width Start-call pill.
+At 760px and below, gutters drop to 16px and the plate-to-caption gap to 20px. The plate is sized with `calc(100dvh - 380px)`. The self-view shrinks to 112px and overlaps the plate's top-right corner. Controls no longer wrap. The voice select grows to fill the row. The mute, camera and hang-up pills become icon-only: their labels stay in the DOM as screen-reader text. With no call active, the footer stacks into a column, with the full-width select above a full-width Start-call pill.
 
 ## Elevation & Depth
 
@@ -205,7 +205,7 @@ Quiet hairline pills. Only the action that starts or ends the call is filled.
 - **Copy:** each state names what krat is doing, with elapsed seconds while waking or thinking and the response latency while speaking ("Hablando · respondió en 2,4 s").
 
 ### Inputs / Fields
-- **Voice select:** a native `<select>` with `appearance: none`, styled as a ghost pill (48px tall, 0 44px 0 20px padding). A 16px dim-sand chevron sits 18px from the right edge. Hover fills with steel plate. Options render steel on sand. Narrow screens use short labels ("Femenina · ES") because native selects ignore `text-overflow`.
+- **Voice select:** a native `<select>` with `appearance: none`, styled as a ghost pill (48px tall, 0 44px 0 20px padding). A 16px dim-sand chevron sits 18px from the right edge. Hover fills with steel plate. Options render steel on sand. Voice names are short single words, so they fit at every width.
 
 ### Captions
 - **Idle:** the display heading plus a dim-sand hint.

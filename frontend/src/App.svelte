@@ -5,14 +5,11 @@
   import { Call } from './lib/call.svelte'
 
   const call = new Call()
-  const narrow = matchMedia('(max-width: 760px)')
-  let short = $state(narrow.matches)
-  narrow.addEventListener('change', e => (short = e.matches))
   let now = $state(performance.now())
   let videoEl = $state<HTMLVideoElement>()
 
   onMount(() => {
-    call.loadModels()
+    call.loadVoices()
     const t = setInterval(() => (now = performance.now()), 100)
     return () => clearInterval(t)
   })
@@ -38,32 +35,11 @@
       case 'offline': return 'Sin conexión con el servidor · reintentando'
     }
   })
-
-  const LANG: Record<string, string> = {
-    'american-english': 'inglés (EE. UU.)', 'british-english': 'inglés (R. U.)', arabic: 'árabe', chinese: 'chino',
-    danish: 'danés', dutch: 'neerlandés', finnish: 'finés', french: 'francés', german: 'alemán', greek: 'griego',
-    hebrew: 'hebreo', italian: 'italiano', japanese: 'japonés', korean: 'coreano', polish: 'polaco',
-    portuguese: 'portugués', spanish: 'español', swedish: 'sueco', turkish: 'turco',
-  }
-  const CODE: Record<string, string> = {
-    'american-english': 'EN-US', 'british-english': 'EN-GB', arabic: 'AR', chinese: 'ZH', danish: 'DA', dutch: 'NL',
-    finnish: 'FI', french: 'FR', german: 'DE', greek: 'EL', hebrew: 'HE', italian: 'IT', japanese: 'JA', korean: 'KO',
-    polish: 'PL', portuguese: 'PT', spanish: 'ES', swedish: 'SV', turkish: 'TR',
-  }
-  // Native selects ignore text-overflow, so narrow screens get short labels ("Femenina · ES").
-  function voiceName(v: string, short: boolean) {
-    if (v === 'default') return 'Predeterminada'
-    if (!v.includes('-')) return v // Gemini voices are plain names ("Kore")
-    const [sex, ...rest] = v.split('-')
-    const lang = rest.join('-')
-    const l = short ? (CODE[lang] ?? lang) : (LANG[lang] ?? rest.join(' '))
-    return `${sex === 'female' ? 'Femenina' : sex === 'male' ? 'Masculina' : sex} · ${l}`
-  }
 </script>
 
 <div class="app" data-status={call.status}>
   <header>
-    <p class="name">krat <span>{call.model.label}</span></p>
+    <p class="name">krat</p>
     <p class="chip" role="status" aria-live="polite">
       <span class="dot" aria-hidden="true"></span>{statusText}
     </p>
@@ -85,9 +61,9 @@
         <h1>Habla con krat</h1>
         <p class="hint">Te escucha sin pulsar nada, ve lo que le enseñes a la cámara y puedes interrumpirle hablando.</p>
       {:else if call.status === 'waking'}
-        <p class="hint">{call.model.provider === 'gemini' ? 'Conectando con Gemini…' : 'Cargando el modelo. La primera vez puede tardar medio minuto.'}</p>
+        <p class="hint">Conectando con krat…</p>
       {:else}
-        {#if call.you || call.youPending}<p class="you"><span>Tú:</span> {call.youPending ? '…' : call.you}</p>{/if}
+        {#if call.you}<p class="you"><span>Tú:</span> {call.you}</p>{/if}
         {#if call.reply}
           <p class="reply" class:cut={call.cut}>{call.reply}{#if call.cut}<span class="cutmark"> · interrumpida</span>{/if}</p>
         {:else if call.status === 'listening'}
@@ -109,22 +85,11 @@
         <span>{call.camOn ? 'Apagar cámara' : 'Encender cámara'}</span>
       </button>
     {/if}
-    {#if !call.live && call.models.length > 1}
-      <label class="voice">
-        <span class="sr">Modelo</span>
-        <select value={call.modelId} onchange={e => call.setModel(e.currentTarget.value)}>
-          {#each call.models as m (m.id)}
-            <option value={m.id}>{m.label}</option>
-          {/each}
-        </select>
-        <ChevronDown size={16} aria-hidden="true" />
-      </label>
-    {/if}
     <label class="voice">
       <span class="sr">Voz de krat</span>
-      <select value={call.voice} disabled={call.voiceLocked} title={call.voiceLocked ? 'Con Gemini la voz se elige antes de llamar' : undefined} onchange={e => call.setVoice(e.currentTarget.value)}>
+      <select value={call.voice} disabled={call.voiceLocked} title={call.voiceLocked ? 'La voz se elige antes de empezar la llamada' : undefined} onchange={e => call.setVoice(e.currentTarget.value)}>
         {#each call.voices as v (v)}
-          <option value={v}>{voiceName(v, short)}</option>
+          <option value={v}>{v}</option>
         {/each}
       </select>
       <ChevronDown size={16} aria-hidden="true" />
@@ -155,12 +120,6 @@
     font-size: 1.625rem;
     font-weight: 600;
     letter-spacing: -0.01em;
-  }
-  .name span {
-    margin-left: 10px;
-    font-size: 0.9375rem;
-    font-weight: 400;
-    color: var(--sand-dim);
   }
   .chip {
     display: flex;
@@ -295,8 +254,6 @@
     .app { --plate-size: min(calc(100vw - 32px), calc(100dvh - 380px)); }
     header { padding: 16px; }
     .name { font-size: 1.375rem; }
-    .name { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
-    .name span { margin-left: 0; font-size: 0.8125rem; max-width: 17ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .chip { font-size: 0.8125rem; padding: 6px 12px; white-space: nowrap; }
     main { padding: 0 16px; gap: 20px; }
     .cam { right: 16px; width: 112px; top: 8px; z-index: 1; }

@@ -7,27 +7,27 @@
 web
 
 ## Stack
-Backend Go + Eino (`backend/`, `go run .`); frontend Svelte 5 + Vite + TypeScript (`frontend/`, `npm run dev`). Chosen by the user.
+Backend Go (`backend/`, `go run .`); frontend Svelte 5 + Vite + TypeScript (`frontend/`, `npm run dev`). Chosen by the user.
 
 ## Users
-Farid and his team. They use it as an internal lab: sitting at a desk with a webcam and microphone, they talk hands-free to a local multimodal agent, show it objects, and judge how well it sees, hears and answers. Later they will add tools, MCP and RAG to the same agent.
+Farid and his team. They use it as an internal lab: sitting at a desk with a webcam and microphone, they talk hands-free to a multimodal agent, show it objects, and judge how well it sees, hears and answers. Later they will add tools, MCP and RAG to the same agent.
 
 ## Product Purpose
-A real-time voice-and-vision conversation with **krat**, an agent that runs on a local model (`lfm3-omni`, 1.7B, through Ollama). It plays the same role Anam.ai does, but self-hosted. Success means the conversation feels like a call: you speak, krat answers aloud in a few seconds, you can interrupt it, and it can describe what you hold up to the camera.
+A real-time voice-and-vision conversation with **krat**, an agent that runs on a live speech-to-speech model chosen in the backend's `.env`. The page never names the model or its provider. It plays the same role Anam.ai does. Success means the conversation feels like a call: you speak, krat answers aloud in a few seconds, you can interrupt it, and it can describe what you hold up to the camera.
 
 ## Positioning
-Fully local and inspectable: the model, the agent framework (Eino) and the transport are owned by the team, so new tools and knowledge can be wired in without depending on a hosted avatar service.
+Inspectable: the backend, prompt, tools and transport are owned by the team, so new tools and knowledge can be wired in without depending on a hosted avatar service.
 
 ## Operating Context
 - Desktop browser, webcam and mic, headphones or speakers with browser echo cancellation.
-- The Ollama server is reached through a Cloudflare tunnel whose URL changes. The model cold-starts in about 30 s and responds in about 2–5 s per turn once warm.
-- Spanish is the main language; the model can speak 20+ languages and has male and female voices per language.
+- The model is reached through the backend; there is no cold start and answers begin in about a second.
+- Spanish is the main language; the model answers in the language it is spoken to.
 
 ## Capabilities and Constraints
-- Hands-free turns with voice activity detection, and barge-in (talking while krat speaks stops it).
-- One webcam frame is sent per turn (the model has no native video input).
+- Hands-free turns with voice activity detection, and barge-in (talking while krat speaks stops it; the model's server-side detection decides).
+- One webcam frame per second is streamed during the call.
 - Captions show what the user said (from model transcription) and what krat answers.
-- Voice selectable among the model's voices; default `female-spanish`.
+- Voice selectable among the model's 30 voices before the call; default `Kore`.
 - There is no generated video avatar: krat is represented by an abstract animated form.
 - Undecided: authentication, conversation persistence, multi-user, deployment.
 

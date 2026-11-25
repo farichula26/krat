@@ -61,6 +61,12 @@ func TestBuscar(t *testing.T) {
 
 // Integration test: syncs the test database into the local Redis, then queries through the tools.
 // Needs DATABASE_URL (and DB_SSH for the tunnel) and a running Redis.
+func TestSucursales(t *testing.T) {
+	if got := fmt.Sprint(sucursales(cartaFixture)); got != "[Bar Curich SISA Coffee & Wine]" {
+		t.Errorf("sucursales: %s", got)
+	}
+}
+
 func TestCartaTools(t *testing.T) {
 	loadDotEnv(".env")
 	ctx := context.Background()

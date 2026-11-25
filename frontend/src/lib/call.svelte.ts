@@ -1,15 +1,11 @@
 import { MicVAD } from '@ricky0123/vad-web'
-import { encodeWav, level, Player, toBase64 } from './audio'
+import { level, Player, toBase64 } from './audio'
 
 export type Status = 'off' | 'starting' | 'waking' | 'listening' | 'hearing' | 'thinking' | 'speaking' | 'muted' | 'offline'
 
-type ServerMsg = { type: string; id?: number; seq?: number; text?: string; data?: string; message?: string }
+type ServerMsg = { type: string; text?: string; data?: string; message?: string }
 
-export type ModelInfo = { id: string; label: string; provider: 'local' | 'gemini'; voices: string[]; default: string }
-
-const MODEL_KEY = 'krat.model'
-const voiceKey = (model: string) => `krat.voice.${model}`
-const LOCAL_FALLBACK: ModelInfo = { id: '', label: 'lfm3-omni (local)', provider: 'local', voices: ['female-spanish'], default: 'female-spanish' }
+const VOICE_KEY = 'krat.voice'
 // Higher bar for speech while krat talks, so leftover echo of its own voice doesn't interrupt it.
 const THRESHOLD = 0.5
 const THRESHOLD_WHILE_SPEAKING = 0.85
@@ -27,7 +23,6 @@ export class Call {
   status = $state<Status>('off')
   since = $state(0) // when the current status began (performance.now)
   you = $state('') // what the user said last
-  youPending = $state(false) // turn sent, transcript not back yet
   reply = $state('') // krat's current reply
   cut = $state(false) // the reply was interrupted
   notice = $state('') // problem worth showing (mic denied, model error)
@@ -36,9 +31,8 @@ export class Call {
   camOn = $state(false)
   camNote = $state('')
   video = $state<MediaStream | null>(null)
-  models = $state<ModelInfo[]>([LOCAL_FALLBACK])
-  modelId = $state(stored(MODEL_KEY) ?? '')
-  voice = $state('')
+  voices = $state(['Kore']) // fallback until the server's list arrives
+  voice = $state('Kore')
 
   private ws: WebSocket | null = null
   private vad: MicVAD | null = null
@@ -47,14 +41,10 @@ export class Call {
   private micAn: AnalyserNode | null = null
   private scratch = new Float32Array(1024)
   private videoEl: HTMLVideoElement | null = null
-  private turn = 0
-  private active = 0 // turn id whose messages are accepted; 0 = none
   private sentAt = 0
   private genDone = false
   private ready = false
   private retry = 0
-  // Gemini Live: Google runs the turns, so the mic streams continuously instead of one clip per turn.
-  private streaming = false
   private frameTimer: ReturnType<typeof setInterval> | undefined
   private fatal = false // the server refused the call for good (bad key): do not keep retrying
 
@@ -66,40 +56,31 @@ export class Call {
 
   get live() { return this.status !== 'off' }
 
-  get model(): ModelInfo { return this.models.find(m => m.id === this.modelId) ?? this.models[0] }
-  get voices(): string[] { return this.model.voices }
-  // With Gemini the voice is fixed when the call connects.
-  get voiceLocked() { return this.live && this.model.provider === 'gemini' }
+  // The voice is fixed when the call connects.
+  get voiceLocked() { return this.live }
 
   attachVideo(el: HTMLVideoElement | null) { this.videoEl = el }
 
-  async loadModels() {
+  async loadVoices() {
+    let def = this.voice
     try {
-      const r = await fetch('/api/models')
+      const r = await fetch('/api/voices')
       if (!r.ok) throw new Error(r.statusText)
-      const j: { models: ModelInfo[] } = await r.json()
-      if (j.models.length) this.models = j.models
-    } catch { /* keep the local fallback: the page still works without the list */ }
-    this.setModel(this.modelId)
-  }
-
-  // Each model remembers its own voice: the voice names differ between providers.
-  setModel(id: string) {
-    this.modelId = this.models.some(m => m.id === id) ? id : this.models[0].id
-    store(MODEL_KEY, this.modelId)
-    const saved = stored(voiceKey(this.modelId))
-    this.voice = saved && this.voices.includes(saved) ? saved : this.model.default
+      const j: { voices: string[]; default: string } = await r.json()
+      if (j.voices.length) { this.voices = j.voices; def = j.default }
+    } catch { /* keep the fallback: the page still works without the list */ }
+    const saved = stored(VOICE_KEY)
+    this.voice = saved && this.voices.includes(saved) ? saved : def
   }
 
   setVoice(v: string) {
     this.voice = v
-    store(voiceKey(this.modelId), v)
+    store(VOICE_KEY, v)
   }
 
   async start() {
     this.notice = ''
     this.you = this.reply = ''
-    this.streaming = this.model.provider === 'gemini'
     this.fatal = false
     this.set('starting')
     this.player = new Player()
@@ -141,7 +122,7 @@ export class Call {
         minSpeechMs: 250,
         redemptionMs: 800,
         onSpeechStart: () => this.onSpeechStart(),
-        onSpeechEnd: audio => this.onSpeechEnd(audio),
+        onSpeechEnd: () => this.onSpeechEnd(),
         onVADMisfire: () => { if (this.status === 'hearing') this.toIdle() },
         onFrameProcessed: (_p, frame) => this.feed(frame),
       })
@@ -152,7 +133,7 @@ export class Call {
       this.notice = 'No se pudo cargar la detección de voz. Recarga la página e inténtalo de nuevo.'
       return
     }
-    if (this.streaming) this.frameTimer = setInterval(() => this.sendFrame(), 1000)
+    this.frameTimer = setInterval(() => this.sendFrame(), 1000)
     this.connect()
   }
 
@@ -170,7 +151,6 @@ export class Call {
     this.player?.ctx.close()
     this.player = null
     this.ready = false
-    this.active = 0
     this.set('off')
   }
 
@@ -207,7 +187,7 @@ export class Call {
   }
 
   private connect() {
-    const q = new URLSearchParams({ model: this.modelId, voice: this.voice })
+    const q = new URLSearchParams({ voice: this.voice })
     const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?${q}`)
     this.ws = ws
     ws.onopen = () => { this.retry = 0; if (!this.ready) this.set('waking') }
@@ -221,7 +201,6 @@ export class Call {
         return
       }
       this.ready = false
-      this.active = 0
       this.player?.stop()
       this.set('offline')
       setTimeout(() => { if (this.ws === ws) this.connect() }, Math.min(8000, 1000 * 2 ** this.retry++))
@@ -234,37 +213,16 @@ export class Call {
 
   private onSpeechStart() {
     if (!this.ready) return
-    // With Gemini only its server VAD may cut krat ('interrupted'): voices on a TV must not stop playback here.
-    if (this.streaming && (this.status === 'speaking' || this.status === 'thinking')) return
-    if (this.status === 'speaking' || this.status === 'thinking') this.interrupt()
+    // Only the server's speech detection may cut krat ('interrupted'): voices on a TV must not stop playback here.
+    if (this.status === 'speaking' || this.status === 'thinking') return
     this.set('hearing')
   }
 
-  private interrupt() {
-    if (this.active) this.send({ type: 'interrupt' })
-    this.youPending = false
-    this.active = 0
-    this.player?.stop()
-    if (this.reply) this.cut = true
-  }
-
-  private onSpeechEnd(audio: Float32Array) {
+  // The audio already went out as it was spoken; the server answers on its own.
+  private onSpeechEnd() {
     if (!this.ready || !this.micOn) return
-    if (this.streaming) { // the audio already went out as it was spoken; Gemini answers on its own
-      if (this.status === 'speaking') return // noise over krat's voice, not a turn
-      this.sentAt = performance.now()
-      this.set('thinking')
-      return
-    }
-    this.active = ++this.turn
-    this.send({ type: 'turn', id: this.active, audio: encodeWav(audio), image: this.frame(), voice: this.voice })
+    if (this.status === 'speaking') return // noise over krat's voice, not a turn
     this.sentAt = performance.now()
-    this.genDone = false
-    this.you = ''
-    this.youPending = true
-    this.reply = ''
-    this.cut = false
-    this.notice = ''
     this.set('thinking')
   }
 
@@ -279,9 +237,9 @@ export class Call {
     return c.toDataURL('image/jpeg', 0.8).split(',')[1]
   }
 
-  // Streams the mic to Gemini as 16 kHz PCM16, one 32 ms VAD frame per message: no buffering delay.
+  // Streams the mic as 16 kHz PCM16, one 32 ms VAD frame per message: no buffering delay.
   private feed(frame: Float32Array) {
-    if (!this.streaming || !this.ready || !this.micOn) return
+    if (!this.ready || !this.micOn) return
     const pcm = new Int16Array(frame.length)
     for (let i = 0; i < frame.length; i++) pcm[i] = Math.max(-1, Math.min(1, frame[i])) * 0x7fff
     this.send({ type: 'audio', data: toBase64(new Uint8Array(pcm.buffer)) })
@@ -293,8 +251,8 @@ export class Call {
     if (image) this.send({ type: 'frame', image })
   }
 
-  // Messages of a Gemini call. There are no turn ids: Google decides when a turn starts and ends.
-  private onLiveMessage(m: ServerMsg) {
+  // There are no turn ids: the server decides when a turn starts and ends.
+  private onMessage(m: ServerMsg) {
     switch (m.type) {
       case 'ready':
         this.ready = true
@@ -302,10 +260,10 @@ export class Call {
         break
       case 'fatal':
         this.fatal = true
-        this.notice = m.message ?? 'No se pudo conectar con Gemini.'
+        this.notice = m.message ?? 'No se pudo conectar con krat.'
         break
       case 'error':
-        this.notice = m.message ?? 'Error de Gemini.'
+        this.notice = m.message ?? 'Se cortó la conexión con krat.'
         break
       case 'newTurn':
         this.you = this.reply = ''
@@ -320,7 +278,7 @@ export class Call {
         break
       case 'audio':
         this.player?.enqueue(m.data!, () => {
-          // Only once per answer. 'hearing' counts: Gemini may end your turn before the local VAD's 800 ms redemption.
+          // Only once per answer. 'hearing' counts: the server may end your turn before the local VAD's 800 ms redemption.
           if (this.status !== 'thinking' && this.status !== 'listening' && this.status !== 'hearing') return
           this.latency = this.status === 'thinking' ? (performance.now() - this.sentAt) / 1000 : null
           this.vad?.setOptions({ positiveSpeechThreshold: THRESHOLD_WHILE_SPEAKING })
@@ -335,45 +293,6 @@ export class Call {
       case 'turnDone':
         this.genDone = true
         if (!this.player?.playing && (this.status === 'thinking' || this.status === 'speaking')) this.toIdle()
-        break
-    }
-  }
-
-  private onMessage(m: ServerMsg) {
-    if (this.streaming) return this.onLiveMessage(m)
-    if (m.type === 'ready') {
-      this.ready = true
-      if (this.status === 'waking' || this.status === 'offline' || this.status === 'starting') this.toIdle()
-      return
-    }
-    if (m.type === 'error' && !m.id) { this.notice = m.message ?? 'Error del servidor.'; return }
-    if (!m.id || m.id !== this.active) return // stale turn, e.g. after an interruption
-
-    switch (m.type) {
-      case 'transcript':
-        this.you = m.text ?? ''
-        this.youPending = false
-        break
-      case 'delta':
-        this.reply += m.text ?? ''
-        break
-      case 'audio':
-        this.player?.enqueue(m.data!, () => {
-          if (m.id !== this.active || this.status === 'speaking') return
-          this.latency = (performance.now() - this.sentAt) / 1000
-          this.vad?.setOptions({ positiveSpeechThreshold: THRESHOLD_WHILE_SPEAKING })
-          this.set('speaking')
-        })
-        break
-      case 'done':
-        if (this.youPending) this.you = '(no se pudo transcribir)'
-        this.youPending = false
-        this.genDone = true
-        if (!this.player?.playing) this.toIdle()
-        break
-      case 'error':
-        this.notice = `krat no pudo responder: ${m.message}. Vuelve a intentarlo.`
-        this.toIdle()
         break
     }
   }

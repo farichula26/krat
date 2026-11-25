@@ -14,6 +14,14 @@ import (
 	"google.golang.org/genai"
 )
 
+const instruction = `Eres krat, un asistente de voz cálido y curioso que conversa en tiempo real con el usuario.
+En cada turno recibes el audio de lo que el usuario acaba de decir y, a veces, una imagen de lo que ve su cámara en ese momento.
+Escucha el audio y responde a lo que dice. Nunca lo transcribas ni lo repitas.
+Usa la imagen solo cuando sea relevante, por ejemplo si te muestra algo o te pregunta qué ves.
+Tú no tienes cuerpo ni manos: lo que aparece en la imagen lo tiene el usuario. Háblale de tú ("tienes", "sostienes", "me enseñas").
+Responde en el idioma del usuario (por defecto español), de forma natural y breve: de una a tres frases cortas.
+No uses listas, markdown ni emojis, porque tu respuesta se convertirá en voz.`
+
 // liveIn is what the browser sends during a Gemini call: continuous 16 kHz PCM and a JPEG about once a second.
 type liveIn struct {
 	Type  string `json:"type"` // "audio" | "frame"
@@ -33,6 +41,7 @@ func (s *server) handleLive(ctx context.Context, c *websocket.Conn, model, voice
 		}
 	}
 	// kind "fatal" tells the page not to retry (bad key, unknown model); "error" is a cut mid-call.
+	// Messages the page shows never name the provider.
 	fail := func(kind, user string, err error) {
 		log.Printf("live: %s: %s", user, strings.ReplaceAll(err.Error(), s.geminiKey, "***"))
 		send(outMsg{Type: kind, Message: user})
@@ -47,7 +56,7 @@ func (s *server) handleLive(ctx context.Context, c *websocket.Conn, model, voice
 		HTTPOptions: genai.HTTPOptions{APIVersion: "v1beta"}, // the Live endpoint is not served under v1
 	})
 	if err != nil {
-		fail("fatal", "No se pudo preparar la conexión con Gemini.", err)
+		fail("fatal", "No se pudo preparar la conexión.", err)
 		return
 	}
 	lc := &genai.LiveConnectConfig{
@@ -56,6 +65,10 @@ func (s *server) handleLive(ctx context.Context, c *websocket.Conn, model, voice
 		SpeechConfig:             &genai.SpeechConfig{VoiceConfig: &genai.VoiceConfig{PrebuiltVoiceConfig: &genai.PrebuiltVoiceConfig{VoiceName: voice}}},
 		InputAudioTranscription:  &genai.AudioTranscriptionConfig{},
 		OutputAudioTranscription: &genai.AudioTranscriptionConfig{},
+		// Camera frames fill the context in ~2 min and Gemini then ends the session, wiping krat's memory;
+		// the sliding window drops the oldest turns instead.
+		// shortcut: a connection still ends after ~10 min (GoAway) and the reconnect starts fresh; add SessionResumption if calls get that long.
+		ContextWindowCompression: &genai.ContextWindowCompressionConfig{SlidingWindow: &genai.SlidingWindow{}},
 		// Low start sensitivity + 300 ms of steady speech: a TV crowd or a shout doesn't start a turn or cut krat.
 		// 500 ms of silence ends your turn (default ~800): the low end of Google's recommended 500-800 ms.
 		RealtimeInputConfig: &genai.RealtimeInputConfig{AutomaticActivityDetection: &genai.AutomaticActivityDetection{
@@ -65,12 +78,12 @@ func (s *server) handleLive(ctx context.Context, c *websocket.Conn, model, voice
 		}},
 	}
 	if s.carta != nil {
-		lc.SystemInstruction.Parts[0].Text += cartaInstruction
+		lc.SystemInstruction.Parts[0].Text += cartaPrompt(ctx, s.carta)
 		lc.Tools = []*genai.Tool{{FunctionDeclarations: cartaTools}}
 	}
 	sess, err := client.Live.Connect(ctx, model, lc)
 	if err != nil {
-		fail("fatal", "No se pudo conectar con Gemini. Revisa la clave y vuelve a intentarlo.", err)
+		fail("fatal", "No se pudo conectar con krat. Revisa la clave y vuelve a intentarlo.", err)
 		return
 	}
 	defer sess.Close()
@@ -95,7 +108,7 @@ func (s *server) handleLive(ctx context.Context, c *websocket.Conn, model, voice
 			m, err := sess.Receive()
 			if err != nil {
 				if ctx.Err() == nil {
-					fail("error", "Gemini cerró la conexión.", err)
+					fail("error", "Se cortó la conexión con krat.", err)
 				}
 				return
 			}
@@ -110,7 +123,7 @@ func (s *server) handleLive(ctx context.Context, c *websocket.Conn, model, voice
 				}
 				if err := sessSend(func() error { return sess.SendToolResponse(genai.LiveToolResponseInput{FunctionResponses: res}) }); err != nil {
 					if ctx.Err() == nil {
-						fail("error", "Se perdió la conexión con Gemini.", err)
+						fail("error", "Se perdió la conexión con krat.", err)
 					}
 					return
 				}
@@ -182,7 +195,7 @@ func (s *server) handleLive(ctx context.Context, c *websocket.Conn, model, voice
 		}
 		if err := sessSend(func() error { return sess.SendRealtimeInput(in) }); err != nil {
 			if ctx.Err() == nil {
-				fail("error", "Se perdió la conexión con Gemini.", err)
+				fail("error", "Se perdió la conexión con krat.", err)
 			}
 			return
 		}
